@@ -16,7 +16,6 @@ window.addEventListener('load', function(event) {
 
 final attendance = UserScript(
   source: """ window.addEventListener('load', function () {
-  // Replace these with the actual credentials
   const studentID = '241UC24151';
   const password = 'Not today';
 

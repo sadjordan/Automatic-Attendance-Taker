@@ -3,6 +3,7 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:flutter/foundation.dart';
 
 class Profile extends StatefulWidget {
   const Profile({super.key});
@@ -18,12 +19,13 @@ class _ProfileState extends State<Profile> {
   final TextEditingController nameController = TextEditingController();
   final TextEditingController student_idController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
+  // var databaseFactory = databaseFactoryFfi;
 
   void db_stuff() async {
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-      sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
-    } 
+    // if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    //   sqfliteFfiInit();
+    //   databaseFactory = databaseFactoryFfi;
+    // } 
 
     var databasesPath = await getDatabasesPath();
     String path = join(databasesPath, 'profile.db');
@@ -40,7 +42,7 @@ class _ProfileState extends State<Profile> {
     );
   }
 
-  void db_insert(name, student_id, password) async {
+  void db_insert(String name, String student_id, String password) async {
     var databasesPath = await getDatabasesPath();
     String path = join(databasesPath, 'profile.db');
     Database database = await openDatabase(path);
@@ -59,7 +61,34 @@ class _ProfileState extends State<Profile> {
       }
     );
     }
-    print("yay");
+    List<Map<String, dynamic>> rows = await database.rawQuery('SELECT * FROM Profile');
+
+  // Show the data in a message box
+  showDialog(
+    context: this.context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: const Text('Database Records'),
+        content: SingleChildScrollView(
+          child: ListBody(
+            children: rows.map((row) {
+              return Text(
+                'ID: ${row['id']}, Name: ${row['name']}, Student ID: ${row['student_ID']}, Password: ${row['password']}',
+              );
+            }).toList(),
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            child: const Text('OK'),
+            onPressed: () {
+              Navigator.of(this.context).pop();
+            },
+          ),
+        ],
+      );
+    },
+  );
   }
   
 
