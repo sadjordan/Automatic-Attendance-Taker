@@ -22,7 +22,7 @@ class _SadAppState extends State<SadApp> {
 
   final List<Widget> Pages = [
     const Camera(),
-    const Home(),
+    // const Home(link: null),
     const Profile()
   ];
 
@@ -53,10 +53,10 @@ class _SadAppState extends State<SadApp> {
               icon: Icon(Icons.camera_alt),
               label: 'Camera',
               backgroundColor: Colors.red),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home),
-              label: 'Home',
-              backgroundColor: Colors.blue),
+            // BottomNavigationBarItem(
+            //   icon: Icon(Icons.home),
+            //   label: 'Home',
+            //   backgroundColor: Colors.blue),
             BottomNavigationBarItem(
               icon: Icon(Icons.person),
               label: 'Profile',

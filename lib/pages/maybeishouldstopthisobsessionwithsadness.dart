@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'dart:async';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:url_launcher/url_launcher.dart';
+
+import 'package:tragedy/pages/ijustwanttobehappy.dart';
+// import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+// import 'package:url_launcher/url_launcher.dart';
 
 class Camera extends StatefulWidget {
   const Camera({super.key});
@@ -13,6 +15,10 @@ class Camera extends StatefulWidget {
 
 class _CameraState extends State<Camera> with WidgetsBindingObserver {
   Uri? _url;
+  double _current_zoom = 0.00;
+  bool lock = false;
+  // final GlobalKey webViewKey = GlobalKey();
+  // InAppWebViewController? webViewController;
 
   final MobileScannerController controller = MobileScannerController(
       // required options for the scanner
@@ -35,6 +41,7 @@ class _CameraState extends State<Camera> with WidgetsBindingObserver {
   Future<void> _handleqr(BarcodeCapture barcodeCapture) async {
     controller.stop();
     String? stuff;
+    lock = true;
 
     for (final barcode in barcodeCapture.barcodes) {
       stuff = barcode.rawValue;
@@ -61,9 +68,18 @@ class _CameraState extends State<Camera> with WidgetsBindingObserver {
             TextButton(
               child: const Text('Yay!'),
               onPressed: () {
-                _launchUrl();
+                print("yes 1");
+                // _launchUrl();
+                // _url = Uri.parse("https://osc.mmu.edu.my/psc/csprd/EMPLOYEE/SA/c/N_PUBLIC.N_CLASS_QRSTUD_ATT.GBL?&GUID=0b5af445-16eb-447b-bc17-b635ce68303f&KEYWORD=KMNOSDSK");
+                Navigator.of(context).pop(); // Close the dialog
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => Home(link: _url)),
+                );
+                print("yes 2");
+                lock = false;
                 controller.start();
-                Navigator.of(context).pop();
+                // Navigator.of(context).pop();
               },)
           ]
         );
@@ -102,9 +118,26 @@ class _CameraState extends State<Camera> with WidgetsBindingObserver {
   }
 
   Future<void> _launchUrl() async {
-    if (!await launchUrl(_url!)) {
-      throw Exception('Could not launch $_url');
-    }
+    // InAppWebView(
+    //   key: webViewKey,
+    //   initialUrlRequest: 
+    //     URLRequest(url: _url != null ? WebUri.uri(_url!) : null),
+    // );
+
+    // if (!await launchUrl(_url!)) {
+    //   throw Exception('Could not launch $_url');
+    // }
+    print("what");
+
+    _url = Uri.parse("https://osc.mmu.edu.my/psc/csprd/EMPLOYEE/SA/c/N_PUBLIC.N_CLASS_QRSTUD_ATT.GBL?&GUID=0b5af445-16eb-447b-bc17-b635ce68303f&KEYWORD=KMNOSDSK");
+    
+    print("why");
+    print("Navigating to Home with URL: $_url");
+     MaterialPageRoute(builder: (context) {
+        print("Navigating to Home with URL: $_url");
+        return Home(link: _url);
+      }
+    );
   }
 
   @override
@@ -114,7 +147,11 @@ class _CameraState extends State<Camera> with WidgetsBindingObserver {
       body: Stack(
         children: [
           MobileScanner(
-            onDetect: _handleqr,
+            onDetect: (barcodeCapture) {
+              if (!lock) {
+                _handleqr(barcodeCapture);
+              }
+            },
           ),
           Align(
             alignment: Alignment.bottomCenter,
@@ -126,6 +163,19 @@ class _CameraState extends State<Camera> with WidgetsBindingObserver {
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   // Expanded(child: Center(child: _buildBarcode(_barcode))),
+                  Text(
+                    'Zoom: ${_current_zoom.toStringAsFixed(4)}x',
+                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                  Slider(value: _current_zoom,
+                    min: 0.00,
+                    max: 1.00,
+                    onChanged: (double value) {
+                    setState(() {
+                      _current_zoom = value;
+                      controller.setZoomScale(_current_zoom);
+                    });
+                  })
                 ],
               ),
             ),
