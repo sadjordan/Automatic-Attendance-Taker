@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:tragedy/pages/ijustwanttobehappy.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:tragedy/pages/maybeishouldstopthisobsessionwithsadness.dart';
 import 'package:tragedy/pages/thetragedyofourtimes.dart';
-import 'package:flutter/foundation.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:tragedy/dialogs/settings_dialog.dart';
 // import 'package:camera/camera.dart';
 
 Future<void> main() async {
@@ -29,16 +28,36 @@ class _SadAppState extends State<SadApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      // Add localization support
+      localizationsDelegates: [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('en'), // English
+      ],
       home: Scaffold(
         appBar: AppBar(
           backgroundColor: Color.fromARGB(0, 224, 74, 74),
           title: const Text('This is a sad app'),
         ),
         body: Pages[currentPage],
-        floatingActionButton: FloatingActionButton(
-          child: Text('Sad'),
-          onPressed: () {
-            print('Sadness');}
+        floatingActionButton: Builder(
+          builder: (BuildContext context) {
+            return FloatingActionButton(
+              child: const Icon(Icons.settings),
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (BuildContext dialogContext) {
+                    return const SettingsDialog();
+                  },
+                );
+              }
+            );
+          }
         ),
         bottomNavigationBar: BottomNavigationBar(
           type: BottomNavigationBarType.shifting,

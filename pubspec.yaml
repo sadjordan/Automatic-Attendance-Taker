@@ -30,6 +30,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   # camera: ^0.11.1
   mobile_scanner: ^6.0.7
   flutter_inappwebview: ^6.1.5
