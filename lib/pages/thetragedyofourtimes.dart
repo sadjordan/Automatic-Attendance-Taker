@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/credential_manager.dart';
+import '../dialogs/database_helper_dialog.dart';
 
 class Profile extends StatefulWidget {
   const Profile({super.key});
@@ -10,12 +11,39 @@ class Profile extends StatefulWidget {
 
 class _ProfileState extends State<Profile> {
   bool _obscurePassword = true;
+  bool _isDatabaseReady = false;
+  String _databaseStatus = 'Checking database...';
   final _formKey = GlobalKey<FormState>();
   final CredentialManager _credentialManager = CredentialManager();
 
   final TextEditingController nameController = TextEditingController();
   final TextEditingController student_idController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
+  
+  @override
+  void initState() {
+    super.initState();
+    _checkDatabaseReady();
+  }
+  
+  // Check if database is ready to use
+  Future<void> _checkDatabaseReady() async {
+    try {
+      // Use a simple query to check database availability
+      final result = await _credentialManager.checkDatabaseIntegrity();
+      setState(() {
+        _isDatabaseReady = result['integrity_ok'] == true;
+        _databaseStatus = _isDatabaseReady 
+            ? 'Database ready'
+            : 'Database issue detected. Please check database tools.';
+      });
+    } catch (e) {
+      setState(() {
+        _isDatabaseReady = false;
+        _databaseStatus = 'Database error: $e';
+      });
+    }
+  }
 
   void saveCredentials() async {
     String name = nameController.text;
@@ -262,6 +290,47 @@ class _ProfileState extends State<Profile> {
 
   @override
   Widget build(BuildContext context) {
+    // Show database status indicator if there are issues
+    if (!_isDatabaseReady) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 48, color: Colors.orange),
+            SizedBox(height: 16),
+            Text(
+              'Database Issue Detected',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                _databaseStatus,
+                textAlign: TextAlign.center,
+              ),
+            ),
+            SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => DatabaseHelperDialog(),
+                );
+              },
+              child: Text('Open Database Tools'),
+            ),
+            SizedBox(height: 16),
+            TextButton(
+              onPressed: _checkDatabaseReady,
+              child: Text('Try Again'),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    // Regular UI when database is ready
     return Form(
       key: _formKey,
       child: Padding(

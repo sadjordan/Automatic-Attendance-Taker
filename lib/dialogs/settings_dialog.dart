@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
 import '../services/credential_manager.dart';
 import '../dialogs/error_history_dialog.dart';
+import '../dialogs/database_helper_dialog.dart';
 
 class SettingsDialog extends StatefulWidget {
   const SettingsDialog({super.key});
@@ -33,11 +35,18 @@ class _SettingsDialogState extends State<SettingsDialog> {
     });
     
     try {
-      List<Map<String, dynamic>> entries = await _credentialManager.getCredentialsWithSettings();
+      // Get entries from database
+      List<Map<String, dynamic>> dbEntries = await _credentialManager.getCredentialsWithSettings();
+      
+      // Convert read-only maps to modifiable maps
+      List<Map<String, dynamic>> modifiableEntries = dbEntries.map((entry) {
+        // Create a new map with the same data that we can modify
+        return Map<String, dynamic>.from(entry);
+      }).toList();
       
       if (mounted) {
         setState(() {
-          _entries = entries;
+          _entries = modifiableEntries;
           _isLoading = false;
         });
       }
@@ -56,24 +65,76 @@ class _SettingsDialogState extends State<SettingsDialog> {
       }
     }
   }
+  
+  // Update a single entry without reloading the entire list
+  Future<void> _updateEntrySelection(int index, int id, bool isSelected) async {
+    // Optimistically update UI
+    setState(() {
+      _entries[index]['is_selected'] = isSelected ? 1 : 0;
+    });
+    
+    // Update in database
+    await _credentialManager.updateSettingStatus(id, isSelected);
+  }
+  
+  // Update error status without reloading the entire list
+  Future<void> _updateEntryErrorStatus(int index, int id, bool hasError) async {
+    // Optimistically update UI
+    setState(() {
+      _entries[index]['error'] = hasError ? 1 : 0;
+    });
+    
+    // Update in database
+    await _credentialManager.updateErrorStatus(id, hasError);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Settings'),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _entries.isEmpty
-            ? const Center(child: Text('No credentials found.'))
-            : ListView.builder(
-                shrinkWrap: true,
-                itemCount: _entries.length,
-                itemBuilder: (context, index) {
-                  final entry = _entries[index];
-                  final bool isSelected = entry['is_selected'] == 1;
-                  final bool hasError = entry['error'] == 1;
+    // Calculate appropriate dialog dimensions based on screen size
+    final Size screenSize = MediaQuery.of(context).size;
+    final double dialogWidth = math.min(screenSize.width * 0.85, 600.0);
+    final double dialogHeight = math.min(screenSize.height * 0.7, 800.0);
+    
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        width: dialogWidth,
+        height: dialogHeight,
+        padding: EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header with title and close button
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Settings',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  icon: Icon(Icons.close),
+                  onPressed: () => Navigator.of(context).pop(),
+                  padding: EdgeInsets.zero,
+                  constraints: BoxConstraints(),
+                ),
+              ],
+            ),
+            Divider(),
+            
+            // Main content area
+            Expanded(
+              child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _entries.isEmpty
+                  ? const Center(child: Text('No credentials found.'))
+                  : ListView.builder(
+                      itemCount: _entries.length,
+                      itemBuilder: (context, index) {
+                        final entry = _entries[index];
+                        final bool isSelected = entry['is_selected'] == 1;
+                        final bool hasError = entry['error'] == 1;
                   
                   return Card(
                     color: hasError ? Colors.red.shade50 : null,
@@ -86,11 +147,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                             value: isSelected,
                             onChanged: (bool? value) async {
                               if (value != null) {
-                                await _credentialManager.updateSettingStatus(
-                                  entry['id'], 
-                                  value
-                                );
-                                _loadEntries(); // Reload the list
+                                await _updateEntrySelection(index, entry['id'], value);
                               }
                             },
                           ),
@@ -102,11 +159,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                                 value: hasError,
                                 activeColor: Colors.red,
                                 onChanged: (bool value) async {
-                                  await _credentialManager.updateErrorStatus(
-                                    entry['id'],
-                                    value
-                                  );
-                                  _loadEntries(); // Reload the list
+                                  await _updateEntryErrorStatus(index, entry['id'], value);
                                 },
                               ),
                               IconButton(
@@ -133,19 +186,38 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   );
                 },
               ),
+            ),
+            
+            // Action buttons
+            ButtonBar(
+              alignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  child: const Text('Refresh'),
+                  onPressed: _loadEntries,
+                ),
+                TextButton(
+                  child: const Text('Database Tools'),
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (BuildContext context) {
+                        return DatabaseHelperDialog();
+                      },
+                    );
+                  },
+                ),
+                TextButton(
+                  child: const Text('Close'),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
-      actions: <Widget>[
-        TextButton(
-          child: const Text('Refresh'),
-          onPressed: _loadEntries,
-        ),
-        TextButton(
-          child: const Text('Close'),
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
-        ),
-      ],
     );
   }
 }

@@ -11,8 +11,31 @@ class CredentialManager {
   CredentialManager._internal();
   
   // This flag tracks if we need to recreate the database
-  bool _needsDatabaseRecreation = true;
+  bool _needsDatabaseRecreation = false;
 
+  // Check if database exists and is valid
+  Future<bool> _checkDatabaseValidity() async {
+    try {
+      var databasesPath = await getDatabasesPath();
+      String path = join(databasesPath, 'profile.db');
+      bool exists = await databaseExists(path);
+      
+      if (!exists) {
+        return false; // Database doesn't exist yet
+      }
+      
+      // Try opening the database to check if it's valid
+      Database db = await openDatabase(path, readOnly: true);
+      await db.query('sqlite_master', limit: 1); // Simple query to test connection
+      await db.close();
+      return true;
+    } catch (e) {
+      print('Database validity check failed: $e');
+      _needsDatabaseRecreation = true;
+      return false;
+    }
+  }
+  
   // Initialize database
   Future<Database> _initDatabase() async {
     // Initialize for desktop platforms
@@ -23,6 +46,9 @@ class CredentialManager {
 
     var databasesPath = await getDatabasesPath();
     String path = join(databasesPath, 'profile.db');
+    
+    // Check database validity before proceeding
+    await _checkDatabaseValidity();
     
     // If we need to recreate the database (first run or after an error)
     if (_needsDatabaseRecreation) {
@@ -69,11 +95,21 @@ class CredentialManager {
         // Add error column to Profile table if upgrading from version 2 or earlier
         if (oldVersion < 3) {
           try {
-            await db.execute('ALTER TABLE Profile ADD COLUMN error INTEGER NOT NULL DEFAULT 0');
+            // Check if the error column already exists to avoid errors
+            var columnInfo = await db.rawQuery('PRAGMA table_info(Profile)');
+            bool errorColumnExists = columnInfo.any((col) => col['name'] == 'error');
+            
+            if (!errorColumnExists) {
+              await db.execute('ALTER TABLE Profile ADD COLUMN error INTEGER NOT NULL DEFAULT 0');
+            }
           } catch (e) {
             print('Error adding error column: $e');
-            // If error occurs, force database recreation
-            _needsDatabaseRecreation = true;
+            // Only set recreation flag on specific errors that require recreation
+            if (e.toString().contains('duplicate column')) {
+              print('Column already exists, skipping...');
+            } else {
+              _needsDatabaseRecreation = true;
+            }
           }
         }
       }
@@ -84,7 +120,7 @@ class CredentialManager {
   Future<int> saveCredentials(String name, String studentId, String password, {bool hasError = false}) async {
     final db = await _initDatabase();
     
-    return await db.transaction((txn) async {
+    int id = await db.transaction((txn) async {
       return await txn.rawInsert(
         '''
         INSERT INTO Profile(name, student_ID, password, error)
@@ -93,6 +129,11 @@ class CredentialManager {
         [name, studentId, password, hasError ? 1 : 0]
       );
     });
+    
+    // Create a backup after adding new credentials
+    _autoBackup();
+    
+    return id;
   }
 
   // Get all credentials from database
@@ -131,11 +172,17 @@ class CredentialManager {
   // Delete credential by ID
   Future<int> deleteCredential(int id) async {
     final db = await _initDatabase();
-    return await db.delete(
+    
+    int result = await db.delete(
       'Profile', 
       where: 'id = ?', 
       whereArgs: [id]
     );
+    
+    // Create a backup after deleting a credential
+    _autoBackup();
+    
+    return result;
   }
 
   // Update credential
@@ -252,15 +299,27 @@ class CredentialManager {
     } catch (e) {
       // If there's an error, fall back to just returning the profiles without settings
       print('Error getting credentials with settings: $e');
-      _needsDatabaseRecreation = true; // Mark for recreation next time
       
-      // Just return profiles without settings info
-      var profiles = await db.query('Profile');
-      return profiles.map((profile) => {
-        ...profile,
-        'is_selected': 0,
-        'error': profile['error'] ?? 0
-      }).toList();
+      // Only recreate database for serious corruption errors
+      if (e.toString().contains('no such table') || 
+          e.toString().contains('database disk image is malformed')) {
+        _needsDatabaseRecreation = true;
+      }
+      
+      try {
+        // Just return profiles without settings info
+        var profiles = await db.query('Profile');
+        return profiles.map((profile) => {
+          ...profile,
+          'is_selected': 0,
+          'error': profile['error'] ?? 0
+        }).toList();
+      } catch (profileError) {
+        // If we can't even query profiles, database is likely corrupted
+        print('Error querying profiles: $profileError');
+        _needsDatabaseRecreation = true;
+        return [];
+      }
     }
   }
   
@@ -347,5 +406,160 @@ class CredentialManager {
       whereArgs: [profileId],
       orderBy: 'timestamp DESC'
     );
+  }
+  
+  // Backup database to a file
+  Future<String?> backupDatabase() async {
+    try {
+      var databasesPath = await getDatabasesPath();
+      String dbPath = join(databasesPath, 'profile.db');
+      
+      if (!await databaseExists(dbPath)) {
+        return null; // No database to backup
+      }
+      
+      // Create backup with timestamp
+      String timestamp = DateTime.now().toIso8601String().replaceAll(':', '_').replaceAll('.', '_');
+      String backupPath = join(databasesPath, 'profile_backup_$timestamp.db');
+      
+      // Read original database as bytes
+      File dbFile = File(dbPath);
+      List<int> bytes = await dbFile.readAsBytes();
+      
+      // Write bytes to backup location
+      File backupFile = File(backupPath);
+      await backupFile.writeAsBytes(bytes);
+      
+      print('Database backed up to: $backupPath');
+      return backupPath;
+    } catch (e) {
+      print('Error backing up database: $e');
+      return null;
+    }
+  }
+  
+  // Restore database from most recent backup
+  Future<bool> restoreFromBackup() async {
+    try {
+      var databasesPath = await getDatabasesPath();
+      
+      // Find all backup files
+      Directory directory = Directory(databasesPath);
+      List<FileSystemEntity> files = await directory.list().toList();
+      List<File> backupFiles = files
+          .whereType<File>()
+          .where((file) => file.path.contains('profile_backup_'))
+          .toList();
+      
+      if (backupFiles.isEmpty) {
+        return false; // No backups found
+      }
+      
+      // Sort by modification time, most recent first
+      backupFiles.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+      
+      // Use the most recent backup
+      File mostRecentBackup = backupFiles.first;
+      
+      // Close any open database connections
+      String dbPath = join(databasesPath, 'profile.db');
+      await deleteDatabase(dbPath);
+      
+      // Copy backup to main database path
+      List<int> bytes = await mostRecentBackup.readAsBytes();
+      File dbFile = File(dbPath);
+      await dbFile.writeAsBytes(bytes);
+      
+      print('Database restored from: ${mostRecentBackup.path}');
+      return true;
+    } catch (e) {
+      print('Error restoring database from backup: $e');
+      return false;
+    }
+  }
+  
+  // Automatically create a backup of the database
+  Future<void> _autoBackup() async {
+    try {
+      // Only keep a maximum of 5 backups to prevent filling up storage
+      var databasesPath = await getDatabasesPath();
+      Directory directory = Directory(databasesPath);
+      List<FileSystemEntity> files = await directory.list().toList();
+      List<File> backupFiles = files
+          .whereType<File>()
+          .where((file) => file.path.contains('profile_backup_'))
+          .toList();
+      
+      // Sort by modification time, oldest first
+      backupFiles.sort((a, b) => a.lastModifiedSync().compareTo(b.lastModifiedSync()));
+      
+      // Delete oldest backups if we have more than 5
+      while (backupFiles.length >= 5) {
+        await backupFiles.first.delete();
+        backupFiles.removeAt(0);
+      }
+      
+      // Create a new backup
+      await backupDatabase();
+    } catch (e) {
+      print('Auto backup failed: $e');
+      // Do not throw - this is a background operation that should not affect the main flow
+    }
+  }
+  
+  // Check database integrity
+  Future<Map<String, dynamic>> checkDatabaseIntegrity() async {
+    try {
+      final db = await _initDatabase();
+      
+      // Run PRAGMA integrity_check to ensure database is not corrupted
+      List<Map<String, dynamic>> integrityResult = await db.rawQuery('PRAGMA integrity_check');
+      bool isIntegrityOk = integrityResult.first.values.first == 'ok';
+      
+      // Check for all tables
+      List<Map<String, dynamic>> tableList = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
+      List<String> tables = tableList.map((table) => table['name'].toString()).toList();
+      
+      // Check record counts
+      Map<String, int> recordCounts = {};
+      for (String table in tables) {
+        if (table.startsWith('sqlite_') || table.startsWith('android_')) continue;
+        List<Map<String, dynamic>> countResult = await db.rawQuery('SELECT COUNT(*) as count FROM $table');
+        recordCounts[table] = countResult.first['count'] as int;
+      }
+      
+      return {
+        'integrity_ok': isIntegrityOk,
+        'tables': tables,
+        'record_counts': recordCounts,
+        'database_exists': true,
+      };
+    } catch (e) {
+      print('Database integrity check failed: $e');
+      return {
+        'integrity_ok': false,
+        'error': e.toString(),
+        'database_exists': await databaseExists(join(await getDatabasesPath(), 'profile.db')),
+      };
+    }
+  }
+  
+  // Force recreation of database (for admin use only)
+  Future<bool> forceRecreateDatabase() async {
+    try {
+      // Backup first
+      await backupDatabase();
+      
+      // Set flag to recreate
+      _needsDatabaseRecreation = true;
+      
+      // Initialize will recreate the database
+      await _initDatabase();
+      
+      return true;
+    } catch (e) {
+      print('Force database recreation failed: $e');
+      return false;
+    }
   }
 }
