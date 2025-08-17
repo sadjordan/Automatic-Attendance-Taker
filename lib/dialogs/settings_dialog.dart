@@ -135,57 +135,57 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         final entry = _entries[index];
                         final bool isSelected = entry['is_selected'] == 1;
                         final bool hasError = entry['error'] == 1;
-                  
-                  return Card(
-                    color: hasError ? Colors.red.shade50 : null,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4.0),
-                      child: Column(
-                        children: [
-                          CheckboxListTile(
-                            title: Text(entry['name'] ?? 'No Name (ID: ${entry['student_ID']})'),
-                            value: isSelected,
-                            onChanged: (bool? value) async {
-                              if (value != null) {
-                                await _updateEntrySelection(index, entry['id'], value);
-                              }
-                            },
-                          ),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              Text('Error: ', style: TextStyle(fontSize: 14)),
-                              Switch(
-                                value: hasError,
-                                activeColor: Colors.red,
-                                onChanged: (bool value) async {
-                                  await _updateEntryErrorStatus(index, entry['id'], value);
-                                },
-                              ),
-                              IconButton(
-                                icon: Icon(Icons.history, color: Colors.blueGrey),
-                                tooltip: 'View Error History',
-                                onPressed: () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (BuildContext context) {
-                                      return ErrorHistoryDialog(
-                                        profileId: entry['id'],
-                                        profileName: entry['name'] ?? 'No Name (ID: ${entry['student_ID']})',
-                                      );
+                        
+                        return Card(
+                          color: hasError ? Colors.red.shade50 : null,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4.0),
+                            child: Column(
+                              children: [
+                                CheckboxListTile(
+                                  title: Text(entry['name'] ?? 'No Name (ID: ${entry['student_ID']})'),
+                                  value: isSelected,
+                                  onChanged: (bool? value) async {
+                                    if (value != null) {
+                                      await _updateEntrySelection(index, entry['id'], value);
                                     }
-                                  );
-                                },
-                              ),
-                              const SizedBox(width: 16),
-                            ],
+                                  },
+                                ),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    Text('Error: ', style: TextStyle(fontSize: 14)),
+                                    Switch(
+                                      value: hasError,
+                                      activeColor: Colors.red,
+                                      onChanged: (bool value) async {
+                                        await _updateEntryErrorStatus(index, entry['id'], value);
+                                      },
+                                    ),
+                                    IconButton(
+                                      icon: Icon(Icons.history, color: Colors.blueGrey),
+                                      tooltip: 'View Error History',
+                                      onPressed: () {
+                                        showDialog(
+                                          context: context,
+                                          builder: (BuildContext context) {
+                                            return ErrorHistoryDialog(
+                                              profileId: entry['id'],
+                                              profileName: entry['name'] ?? 'No Name (ID: ${entry['student_ID']})',
+                                            );
+                                          }
+                                        );
+                                      },
+                                    ),
+                                    const SizedBox(width: 16),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
-                        ],
-                      ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
             ),
             
             // Action buttons
