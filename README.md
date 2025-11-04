@@ -1,10 +1,10 @@
 # My (Jordan's) Automatic Attendance Taker
 *use at your own risk
 
-- You can download it from the .apk file named "attendance_taker.apk" in this repository.
+
 
 ## How to use:
-1. Download
+1. You can download it from the .apk file named "attendance_taker.apk" in this repository.
 2. Add "users" — you and your fellow MMU students' student ID and passwords
 3. Scan a QR code
 
